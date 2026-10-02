@@ -1,0 +1,8 @@
+module RemoteTaskManager
+{
+	interface MetricsServer
+	{
+		float getCurrentCpuUsage();
+		float getAvailableRAM();
+	};
+};

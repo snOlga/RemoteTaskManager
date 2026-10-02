@@ -1,4 +1,5 @@
 /server/obj/
 /server/bin/
+/server/metricsServer.ior
 /client/bin/
 /client/obj/
