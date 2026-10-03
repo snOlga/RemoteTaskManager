@@ -16,6 +16,8 @@ namespace RemoteTaskManager
 		public float getCurrentCpuUsage();
 		[IdlName("getAvailableRAM")]
 		public float getAvailableRAM();
+		[IdlName("getTotalDisk")]
+		public float getTotalDisk();
 	}
 }
 

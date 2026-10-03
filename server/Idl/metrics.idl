@@ -4,5 +4,6 @@ module RemoteTaskManager
 	{
 		float getCurrentCpuUsage();
 		float getAvailableRAM();
+		float getTotalDisk();
 	};
 };

@@ -143,6 +143,67 @@ namespace RemoteTaskManager
 				}
 			}
 		}
+		[IdlName("getTotalDisk")]
+		public float getTotalDisk()
+		{
+			while(true)
+			{
+				IInputStream inputStream = null;
+				IOutputStream outputStream = null;
+				try
+				{
+					outputStream = _Request("getTotalDisk", true);
+					inputStream = _Invoke(outputStream);
+					float _result;
+					_result = inputStream.ReadFloat();
+					return _result;
+				}
+				catch(RemarshalException)
+				{
+					continue;
+				}
+				catch(CORBA.ApplicationException aex)
+				{
+					try
+					{
+						switch (aex.Id)
+						{
+							default:
+								throw new RuntimeException("Unexpected exception " + aex.Id);
+						}						
+					}
+					finally
+					{
+						try
+						{
+							aex.InputStream.Close();
+						}
+						catch (Exception ex)
+						{
+							throw new RuntimeException("Unexpected exception " + ex.ToString());
+						}
+					}
+				}
+				finally
+				{
+					if (outputStream != null)
+					{
+						try
+						{
+							outputStream.Close();
+						}
+						catch (Exception e)
+						{
+							throw new RuntimeException("Unexpected exception " + e.ToString());
+						}
+					}
+					if (inputStream != null)
+					{
+						this._ReleaseReply(inputStream);
+					}
+				}
+			}
+		}
 
 	}
 

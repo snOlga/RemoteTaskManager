@@ -1,24 +1,26 @@
+using System.Diagnostics;
 using RemoteTaskManager;
-using server.IServices;
 
 namespace server.Services;
 
 public class MetricsServerImpl : MetricsServerPOA
 {
-    private readonly IMetricsService metricsService;
-
-    public MetricsServerImpl(IMetricsService metricsService)
-    {
-        this.metricsService = metricsService;
-    }
+    private PerformanceCounter cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+    private PerformanceCounter ramCounter = new PerformanceCounter("Memory", "Available MBytes");
+    private PerformanceCounter diskReadCounter = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
 
     public override float getCurrentCpuUsage()
     {
-        return metricsService.getCurrentCpuUsage();
+        return cpuCounter.NextValue();
     }
 
     public override float getAvailableRAM()
     {
-        return metricsService.getAvailableRAM();
+        return ramCounter.NextValue();
+    }
+
+    public override float getTotalDisk()
+    {
+        return diskReadCounter.NextValue();
     }
 }

@@ -56,5 +56,10 @@ namespace RemoteTaskManager
 		{
 			return _OperationsDelegate.getAvailableRAM();
 		}
+		[IdlName("getTotalDisk")]
+		public override float getTotalDisk()
+		{
+			return _OperationsDelegate.getTotalDisk();
+		}
 	}
 }
