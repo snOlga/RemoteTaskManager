@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "dotnetorb.idlcompiler": {
+      "version": "1.0.9",
+      "commands": [
+        "DotNetOrb.IdlCompiler"
+      ],
+      "rollForward": false
+    }
+  }
+}

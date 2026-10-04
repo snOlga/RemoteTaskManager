@@ -7,4 +7,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="DotNetOrb.Core" Version="1.0.14" />
+  </ItemGroup>
+
+  <Target Name="CompileIdl" BeforeTargets="BeforeCompile">
+    <Exec Command="dotnet tool run DotNetOrb.IdlCompiler -o $(ProjectDir)compiled_idls -naming_scheme idl $(ProjectDir)Idl\metrics.idl" />
+  </Target>
+
 </Project>

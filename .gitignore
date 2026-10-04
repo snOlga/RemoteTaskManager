@@ -1,5 +1,7 @@
 /server/obj/
 /server/bin/
 /server/metricsServer.ior
+/server/compiled_idls/
 /client/bin/
 /client/obj/
+/client/compiled_idls/
