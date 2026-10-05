@@ -26,7 +26,9 @@ for (int i = 0; i < serverAmount; i++)
 while (true)
 {
     Console.WriteLine("all                  --  write every server names");
-    Console.WriteLine("RAM [server_name]    --  get available RAM");
+    Console.WriteLine("CPU [server_name]    --  get overall CPU usage (%)");
+    Console.WriteLine("RAM [server_name]    --  get available RAM (GiB)");
+    Console.WriteLine("DISK [server_name]   --  get total DISK space in GiB");
     Console.WriteLine("stop                 --  stop orb");
     string? command = Console.ReadLine();
     switch (command)
@@ -38,8 +40,15 @@ while (true)
                 Console.WriteLine(" - " + server);
             }
             break;
+        case string cpuCommand when cpuCommand.Contains("CPU"):
+            Console.WriteLine($"CPU usage: {servers[cpuCommand.Split(" ")[1]].getCurrentCpuUsage():N1}%");
+            break;
         case string ramCommand when ramCommand.Contains("RAM"):
-            Console.WriteLine("RAM: " + servers[ramCommand.Split(" ")[1]].getAvailableRAM());
+            double availableRamGiB = servers[ramCommand.Split(" ")[1]].getAvailableRAM() / 1024.0;
+            Console.WriteLine($"Available RAM: {availableRamGiB:N2} GiB");
+            break;
+        case string diskCommand when diskCommand.Contains("DISK"):
+            Console.WriteLine("DISK: " + servers[diskCommand.Split(" ")[1]].getTotalDisk() + " GiB");
             break;
         case "stop":
             Console.WriteLine("Shutdowning...");

@@ -7,7 +7,13 @@ public class MetricsServerImpl : MetricsServerPOA
 {
     private PerformanceCounter cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
     private PerformanceCounter ramCounter = new PerformanceCounter("Memory", "Available MBytes");
-    private PerformanceCounter diskReadCounter = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
+
+    public MetricsServerImpl()
+    {
+        cpuCounter.NextValue();
+        Thread.Sleep(TimeSpan.FromSeconds(1));
+        cpuCounter.NextValue();
+    }
 
     public override float getCurrentCpuUsage()
     {
@@ -21,7 +27,11 @@ public class MetricsServerImpl : MetricsServerPOA
 
     public override float getTotalDisk()
     {
-        return diskReadCounter.NextValue();
+        double totalBytes = DriveInfo.GetDrives()
+            .Where(drive => drive.DriveType == DriveType.Fixed && drive.IsReady)
+            .Sum(drive => (double)drive.TotalSize);
+
+        return (float)(totalBytes / (1024 * 1024 * 1024));
     }
 
     public override string getName()

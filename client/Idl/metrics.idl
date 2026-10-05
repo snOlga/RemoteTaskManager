@@ -3,7 +3,9 @@ module RemoteTaskManager
 	interface MetricsServer
 	{
 		float getCurrentCpuUsage();
+		// Available physical memory, in MiB.
 		float getAvailableRAM();
+		// Total capacity of ready fixed drives, in GiB.
 		float getTotalDisk();
 		string getName();
 	};
