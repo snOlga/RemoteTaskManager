@@ -5,7 +5,7 @@ using server.Services;
 var orbProperties = new Dictionary<string, string>
 {
     ["OAIAddr"] = "0.0.0.0",
-    ["OAPort"] = "18018"
+    ["OAPort"] = "19019"
 };
 
 Console.WriteLine("Initializing orb...");

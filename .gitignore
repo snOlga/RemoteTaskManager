@@ -2,6 +2,8 @@
 /server/bin/
 /server/metricsServer.ior
 /server/compiled_idls/
+/server/server_run.log
 /client/bin/
 /client/obj/
 /client/compiled_idls/
+/client/metricsServer.ior
