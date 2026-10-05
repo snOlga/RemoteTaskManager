@@ -204,6 +204,68 @@ namespace RemoteTaskManager
 				}
 			}
 		}
+		[IdlName("getName")]
+		[return: WideChar(false)]
+		public string getName()
+		{
+			while(true)
+			{
+				IInputStream inputStream = null;
+				IOutputStream outputStream = null;
+				try
+				{
+					outputStream = _Request("getName", true);
+					inputStream = _Invoke(outputStream);
+					string _result;
+					_result = inputStream.ReadString();
+					return _result;
+				}
+				catch(RemarshalException)
+				{
+					continue;
+				}
+				catch(CORBA.ApplicationException aex)
+				{
+					try
+					{
+						switch (aex.Id)
+						{
+							default:
+								throw new RuntimeException("Unexpected exception " + aex.Id);
+						}						
+					}
+					finally
+					{
+						try
+						{
+							aex.InputStream.Close();
+						}
+						catch (Exception ex)
+						{
+							throw new RuntimeException("Unexpected exception " + ex.ToString());
+						}
+					}
+				}
+				finally
+				{
+					if (outputStream != null)
+					{
+						try
+						{
+							outputStream.Close();
+						}
+						catch (Exception e)
+						{
+							throw new RuntimeException("Unexpected exception " + e.ToString());
+						}
+					}
+					if (inputStream != null)
+					{
+						this._ReleaseReply(inputStream);
+					}
+				}
+			}
+		}
 
 	}
 

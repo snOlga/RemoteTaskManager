@@ -23,4 +23,9 @@ public class MetricsServerImpl : MetricsServerPOA
     {
         return diskReadCounter.NextValue();
     }
+
+    public override string getName()
+    {
+        return Environment.MachineName;
+    }
 }

@@ -18,6 +18,9 @@ namespace RemoteTaskManager
 		public float getAvailableRAM();
 		[IdlName("getTotalDisk")]
 		public float getTotalDisk();
+		[IdlName("getName")]
+		[return: WideChar(false)]
+		public string getName();
 	}
 }
 

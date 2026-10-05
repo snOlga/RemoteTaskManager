@@ -61,5 +61,11 @@ namespace RemoteTaskManager
 		{
 			return _OperationsDelegate.getTotalDisk();
 		}
+		[IdlName("getName")]
+		[return: WideChar(false)]
+		public override string getName()
+		{
+			return _OperationsDelegate.getName();
+		}
 	}
 }

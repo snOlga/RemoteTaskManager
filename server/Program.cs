@@ -25,3 +25,4 @@ Console.WriteLine("Press any key to stop server...");
 Console.ReadLine();
 poa.Destroy(true, true);
 orb.Shutdown(false);
+Console.WriteLine("Finished");

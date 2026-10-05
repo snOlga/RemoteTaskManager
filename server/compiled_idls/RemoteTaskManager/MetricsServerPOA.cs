@@ -19,6 +19,7 @@ namespace RemoteTaskManager
 			_opsDict.Add("getCurrentCpuUsage", 0);
 			_opsDict.Add("getAvailableRAM", 1);
 			_opsDict.Add("getTotalDisk", 2);
+			_opsDict.Add("getName", 3);
 		}
 		private string[] _ids = {"IDL:RemoteTaskManager/MetricsServer:1.0"};
 
@@ -28,6 +29,9 @@ namespace RemoteTaskManager
 		public abstract float getAvailableRAM();
 		[IdlName("getTotalDisk")]
 		public abstract float getTotalDisk();
+		[IdlName("getName")]
+		[return: WideChar(false)]
+		public abstract string getName();
 
 		public override string[] _AllInterfaces(PortableServer.IPOA poa, byte[] objId)
 		{
@@ -71,6 +75,13 @@ namespace RemoteTaskManager
 							outputStream = handler.CreateReply();
 							var _result = getTotalDisk();
 							outputStream.WriteFloat(_result);
+					}
+					break;
+					case 3:
+					{
+							outputStream = handler.CreateReply();
+							var _result = getName();
+							outputStream.WriteString(_result);
 					}
 					break;
 				}
