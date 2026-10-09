@@ -12,15 +12,15 @@ namespace RemoteTaskManager
 {
 	public interface IMetricsServerOperations
 	{
-		[IdlName("getCurrentCpuUsage")]
-		public float getCurrentCpuUsage();
-		[IdlName("getAvailableRAM")]
-		public float getAvailableRAM();
-		[IdlName("getTotalDisk")]
-		public float getTotalDisk();
-		[IdlName("getName")]
+		[IdlName("GetMetrics")]
+		public RemoteTaskManager.Metrics GetMetrics();
+		[IdlName("GetHeartbeat")]
+		public bool GetHeartbeat();
+		[IdlName("GetServerInfo")]
+		public RemoteTaskManager.ServerInfo GetServerInfo();
+		[IdlName("GetServerId")]
 		[return: WideChar(false)]
-		public string getName();
+		public string GetServerId();
 	}
 }
 

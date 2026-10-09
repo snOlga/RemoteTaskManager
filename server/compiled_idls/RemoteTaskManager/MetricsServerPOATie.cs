@@ -46,26 +46,26 @@ namespace RemoteTaskManager
 			return RemoteTaskManager.MetricsServerHelper.Narrow(_ThisObject(orb));
 		}
 
-		[IdlName("getCurrentCpuUsage")]
-		public override float getCurrentCpuUsage()
+		[IdlName("GetMetrics")]
+		public override RemoteTaskManager.Metrics GetMetrics()
 		{
-			return _OperationsDelegate.getCurrentCpuUsage();
+			return _OperationsDelegate.GetMetrics();
 		}
-		[IdlName("getAvailableRAM")]
-		public override float getAvailableRAM()
+		[IdlName("GetHeartbeat")]
+		public override bool GetHeartbeat()
 		{
-			return _OperationsDelegate.getAvailableRAM();
+			return _OperationsDelegate.GetHeartbeat();
 		}
-		[IdlName("getTotalDisk")]
-		public override float getTotalDisk()
+		[IdlName("GetServerInfo")]
+		public override RemoteTaskManager.ServerInfo GetServerInfo()
 		{
-			return _OperationsDelegate.getTotalDisk();
+			return _OperationsDelegate.GetServerInfo();
 		}
-		[IdlName("getName")]
+		[IdlName("GetServerId")]
 		[return: WideChar(false)]
-		public override string getName()
+		public override string GetServerId()
 		{
-			return _OperationsDelegate.getName();
+			return _OperationsDelegate.GetServerId();
 		}
 	}
 }

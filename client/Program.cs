@@ -5,7 +5,7 @@ using ServerName = string;
 
 ORB orb = (ORB)ORB.Init();
 
-Dictionary<ServerName, IMetricsServer> servers = new Dictionary<ServerName, IMetricsServer>(); // todo: db?
+Dictionary<ServerName, IMetricsServer> servers = new Dictionary<ServerName, IMetricsServer>();
 Console.WriteLine("Server amount: ");
 string? serverAmountStr = Console.ReadLine();
 int serverAmount = int.Parse(serverAmountStr == null ? "0" : serverAmountStr);
@@ -16,46 +16,112 @@ for (int i = 0; i < serverAmount; i++)
     {
         string ior = File.ReadAllText(iorPath);
         IMetricsServer metrics = MetricsServerHelper.Narrow(orb.StringToObject(ior));
-        servers[metrics.getName()] = metrics;
+        servers[metrics.GetServerId()] = metrics;
     }
-    catch (System.Exception)
+    catch (System.Exception e)
     {
-        Console.Error.Write("No such file or server with ior file " + iorPath);
+        Console.Error.WriteLine("Failed to connect to ior file " + iorPath + ": " + e.Message);
     }
 }
+
 while (true)
 {
-    Console.WriteLine("all                  --  write every server names");
-    Console.WriteLine("CPU [server_name]    --  get overall CPU usage (%)");
-    Console.WriteLine("RAM [server_name]    --  get available RAM (GiB)");
-    Console.WriteLine("DISK [server_name]   --  get total DISK space in GiB");
-    Console.WriteLine("stop                 --  stop orb");
+    PrintUsage();
     string? command = Console.ReadLine();
-    switch (command)
+    if (command == null)
     {
-        case "all":
+        continue;
+    }
+
+    string[] tokens = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    string action = tokens.Length == 0 ? "" : tokens[0];
+    string arg = tokens.Length > 1 ? command.Substring(action.Length).Trim() : "";
+
+    try
+    {
+        switch (action)
+        {
+            case "all":
+                servers.PrintAll();
+                break;
+
+            case "metrics":
+                servers.PrintGetMetrics(arg);
+                break;
+
+            case "heartbeat":
+                servers.PrintHeartbeat(arg);
+                break;
+
+            case "info":
+                servers.PrintInfoFor(arg);
+                break;
+
+            case "stop":
+                Console.WriteLine("Shutting down...");
+                orb.Shutdown(false);
+                return;
+
+            default:
+                Console.WriteLine("No such command");
+                break;
+        }
+    }
+    catch (KeyNotFoundException)
+    {
+        Console.Error.WriteLine("No server with id '" + arg + "'");
+    }
+    catch (System.Exception e)
+    {
+        Console.Error.WriteLine("Server '" + arg + "' is not responding: " + e.Message);
+    }
+}
+
+static void PrintUsage()
+{
+    Console.WriteLine();
+    Console.WriteLine("all                    --  write every server names");
+    Console.WriteLine("metrics [server_name]  --  get CPU / memory / disk metrics");
+    Console.WriteLine("heartbeat [server]     --  check whether the server is available");
+    Console.WriteLine("info [server_name]     --  get server info (OS, CPU amount, memory, disk)");
+    Console.WriteLine("stop                   --  stop orb");
+}
+
+public static class CustomExtensions
+{
+    extension(Dictionary<ServerName, IMetricsServer> servers)
+    {
+        public void PrintAll()
+        {
             Console.WriteLine("Server names:");
-            foreach (var server in servers.Keys)
+            foreach (ServerName server in servers.Keys)
             {
                 Console.WriteLine(" - " + server);
             }
-            break;
-        case string cpuCommand when cpuCommand.Contains("CPU"):
-            Console.WriteLine($"CPU usage: {servers[cpuCommand.Split(" ")[1]].getCurrentCpuUsage():N1}%");
-            break;
-        case string ramCommand when ramCommand.Contains("RAM"):
-            double availableRamGiB = servers[ramCommand.Split(" ")[1]].getAvailableRAM() / 1024.0;
-            Console.WriteLine($"Available RAM: {availableRamGiB:N2} GiB");
-            break;
-        case string diskCommand when diskCommand.Contains("DISK"):
-            Console.WriteLine("DISK: " + servers[diskCommand.Split(" ")[1]].getTotalDisk() + " GiB");
-            break;
-        case "stop":
-            Console.WriteLine("Shutdowning...");
-            orb.Shutdown(false);
-            break;
-        default:
-            Console.WriteLine("No such command");
-            break;
+        }
+
+        public void PrintGetMetrics(string arg)
+        {
+            Metrics metrics = servers[arg].GetMetrics();
+            Console.WriteLine("CPU usage:   " + metrics.cpuUsage.ToString("N1") + " %");
+            Console.WriteLine("Memory used: " + (metrics.memoryUsage / 1024.0).ToString("N2") + " / " + (metrics.memoryTotal / 1024.0).ToString("N2") + " GiB");
+            Console.WriteLine("Disk used:   " + metrics.diskUsage.ToString("N1") + " / " + metrics.diskTotal.ToString("N1") + " GiB");
+        }
+
+        public void PrintHeartbeat(string arg)
+        {
+            bool available = servers[arg].GetHeartbeat();
+            Console.WriteLine("Server '" + arg + "' is " + (available ? "available" : "not available"));
+        }
+
+        public void PrintInfoFor(string arg)
+        {
+            ServerInfo info = servers[arg].GetServerInfo();
+            Console.WriteLine("Server '" + info.name + "':");
+            Console.WriteLine("  OS:           " + info.OS);
+            Console.WriteLine("  CPU cores:    " + info.cpuAmount);
+            Console.WriteLine("  Memory total: " + info.memoryTotal / 1024.0 + " GiB");
+            Console.WriteLine("  Disk total:   " + info.diskTotal + " GiB");
+        }
     }
 }

@@ -16,22 +16,22 @@ namespace RemoteTaskManager
 		static private Dictionary<string,int> _opsDict = new Dictionary<string,int>();
 		static MetricsServerPOA()
 		{
-			_opsDict.Add("getCurrentCpuUsage", 0);
-			_opsDict.Add("getAvailableRAM", 1);
-			_opsDict.Add("getTotalDisk", 2);
-			_opsDict.Add("getName", 3);
+			_opsDict.Add("GetMetrics", 0);
+			_opsDict.Add("GetHeartbeat", 1);
+			_opsDict.Add("GetServerInfo", 2);
+			_opsDict.Add("GetServerId", 3);
 		}
 		private string[] _ids = {"IDL:RemoteTaskManager/MetricsServer:1.0"};
 
-		[IdlName("getCurrentCpuUsage")]
-		public abstract float getCurrentCpuUsage();
-		[IdlName("getAvailableRAM")]
-		public abstract float getAvailableRAM();
-		[IdlName("getTotalDisk")]
-		public abstract float getTotalDisk();
-		[IdlName("getName")]
+		[IdlName("GetMetrics")]
+		public abstract RemoteTaskManager.Metrics GetMetrics();
+		[IdlName("GetHeartbeat")]
+		public abstract bool GetHeartbeat();
+		[IdlName("GetServerInfo")]
+		public abstract RemoteTaskManager.ServerInfo GetServerInfo();
+		[IdlName("GetServerId")]
 		[return: WideChar(false)]
-		public abstract string getName();
+		public abstract string GetServerId();
 
 		public override string[] _AllInterfaces(PortableServer.IPOA poa, byte[] objId)
 		{
@@ -59,28 +59,28 @@ namespace RemoteTaskManager
 					case 0:
 					{
 							outputStream = handler.CreateReply();
-							var _result = getCurrentCpuUsage();
-							outputStream.WriteFloat(_result);
+							var _result = GetMetrics();
+							RemoteTaskManager.MetricsHelper.Write(outputStream, _result);
 					}
 					break;
 					case 1:
 					{
 							outputStream = handler.CreateReply();
-							var _result = getAvailableRAM();
-							outputStream.WriteFloat(_result);
+							var _result = GetHeartbeat();
+							outputStream.WriteBoolean(_result);
 					}
 					break;
 					case 2:
 					{
 							outputStream = handler.CreateReply();
-							var _result = getTotalDisk();
-							outputStream.WriteFloat(_result);
+							var _result = GetServerInfo();
+							RemoteTaskManager.ServerInfoHelper.Write(outputStream, _result);
 					}
 					break;
 					case 3:
 					{
 							outputStream = handler.CreateReply();
-							var _result = getName();
+							var _result = GetServerId();
 							outputStream.WriteString(_result);
 					}
 					break;

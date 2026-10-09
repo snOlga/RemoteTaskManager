@@ -21,8 +21,8 @@ namespace RemoteTaskManager
 
 		public static Type _opsType = typeof(IMetricsServerOperations);
 
-		[IdlName("getCurrentCpuUsage")]
-		public float getCurrentCpuUsage()
+		[IdlName("GetMetrics")]
+		public RemoteTaskManager.Metrics GetMetrics()
 		{
 			while(true)
 			{
@@ -30,10 +30,10 @@ namespace RemoteTaskManager
 				IOutputStream outputStream = null;
 				try
 				{
-					outputStream = _Request("getCurrentCpuUsage", true);
+					outputStream = _Request("GetMetrics", true);
 					inputStream = _Invoke(outputStream);
-					float _result;
-					_result = inputStream.ReadFloat();
+					RemoteTaskManager.Metrics _result;
+					_result = RemoteTaskManager.MetricsHelper.Read(inputStream);
 					return _result;
 				}
 				catch(RemarshalException)
@@ -82,8 +82,8 @@ namespace RemoteTaskManager
 				}
 			}
 		}
-		[IdlName("getAvailableRAM")]
-		public float getAvailableRAM()
+		[IdlName("GetHeartbeat")]
+		public bool GetHeartbeat()
 		{
 			while(true)
 			{
@@ -91,10 +91,10 @@ namespace RemoteTaskManager
 				IOutputStream outputStream = null;
 				try
 				{
-					outputStream = _Request("getAvailableRAM", true);
+					outputStream = _Request("GetHeartbeat", true);
 					inputStream = _Invoke(outputStream);
-					float _result;
-					_result = inputStream.ReadFloat();
+					bool _result;
+					_result = inputStream.ReadBoolean();
 					return _result;
 				}
 				catch(RemarshalException)
@@ -143,8 +143,8 @@ namespace RemoteTaskManager
 				}
 			}
 		}
-		[IdlName("getTotalDisk")]
-		public float getTotalDisk()
+		[IdlName("GetServerInfo")]
+		public RemoteTaskManager.ServerInfo GetServerInfo()
 		{
 			while(true)
 			{
@@ -152,10 +152,10 @@ namespace RemoteTaskManager
 				IOutputStream outputStream = null;
 				try
 				{
-					outputStream = _Request("getTotalDisk", true);
+					outputStream = _Request("GetServerInfo", true);
 					inputStream = _Invoke(outputStream);
-					float _result;
-					_result = inputStream.ReadFloat();
+					RemoteTaskManager.ServerInfo _result;
+					_result = RemoteTaskManager.ServerInfoHelper.Read(inputStream);
 					return _result;
 				}
 				catch(RemarshalException)
@@ -204,9 +204,9 @@ namespace RemoteTaskManager
 				}
 			}
 		}
-		[IdlName("getName")]
+		[IdlName("GetServerId")]
 		[return: WideChar(false)]
-		public string getName()
+		public string GetServerId()
 		{
 			while(true)
 			{
@@ -214,7 +214,7 @@ namespace RemoteTaskManager
 				IOutputStream outputStream = null;
 				try
 				{
-					outputStream = _Request("getName", true);
+					outputStream = _Request("GetServerId", true);
 					inputStream = _Invoke(outputStream);
 					string _result;
 					_result = inputStream.ReadString();

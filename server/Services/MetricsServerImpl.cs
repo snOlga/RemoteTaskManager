@@ -1,41 +1,76 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using RemoteTaskManager;
 
 namespace server.Services;
 
 public class MetricsServerImpl : MetricsServerPOA
 {
-    private PerformanceCounter cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
-    private PerformanceCounter ramCounter = new PerformanceCounter("Memory", "Available MBytes");
+    private const float MiB = 1024 * 1024;
+    private const float GiB = 1024 * 1024 * 1024;
+
+    private readonly PerformanceCounter cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+    private readonly string serverId;
 
     public MetricsServerImpl()
+        : this(Environment.MachineName)
     {
+    }
+
+    public MetricsServerImpl(string serverId)
+    {
+        this.serverId = serverId;
         cpuCounter.NextValue();
         Thread.Sleep(TimeSpan.FromSeconds(1));
         cpuCounter.NextValue();
     }
 
-    public override float getCurrentCpuUsage()
+    public override Metrics GetMetrics()
     {
-        return cpuCounter.NextValue();
+        (ulong totalBytes, ulong availableBytes) = SystemMetrics.GetPhysicalMemory();
+        return new Metrics
+        {
+            cpuUsage = cpuCounter.NextValue(),
+            memoryUsage = (float)(totalBytes - availableBytes) / MiB,
+            memoryTotal = (float)totalBytes / MiB,
+            diskUsage = GetDiskUsageGiB(),
+            diskTotal = GetTotalDiskGiB()
+        };
     }
 
-    public override float getAvailableRAM()
+    public override bool GetHeartbeat()
     {
-        return ramCounter.NextValue();
+        return true;
     }
 
-    public override float getTotalDisk()
+    public override ServerInfo GetServerInfo()
     {
-        double totalBytes = DriveInfo.GetDrives()
+        return new ServerInfo
+        {
+            name = serverId,
+            OS = RuntimeInformation.OSDescription,
+            cpuAmount = Environment.ProcessorCount,
+            memoryTotal = (float)SystemMetrics.GetPhysicalMemory().totalBytes / MiB,
+            diskTotal = GetTotalDiskGiB()
+        };
+    }
+
+    public override string GetServerId()
+    {
+        return serverId;
+    }
+
+    private static float GetTotalDiskGiB()
+    {
+        return (float)DriveInfo.GetDrives()
             .Where(drive => drive.DriveType == DriveType.Fixed && drive.IsReady)
-            .Sum(drive => (double)drive.TotalSize);
-
-        return (float)(totalBytes / (1024 * 1024 * 1024));
+            .Sum(drive => (double)drive.TotalSize) / GiB;
     }
 
-    public override string getName()
+    private static float GetDiskUsageGiB()
     {
-        return Environment.MachineName;
+        return (float)DriveInfo.GetDrives()
+            .Where(drive => drive.DriveType == DriveType.Fixed && drive.IsReady)
+            .Sum(drive => (double)(drive.TotalSize - drive.TotalFreeSpace)) / GiB;
     }
 }
