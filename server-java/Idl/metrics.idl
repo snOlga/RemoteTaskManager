@@ -1,0 +1,56 @@
+module RemoteTaskManager
+{
+	struct Metrics
+	{
+		float cpuUsage;
+		float memoryUsage;
+		float memoryTotal;
+		float diskUsage;
+		float diskTotal;
+	};
+
+	struct ServerInfo
+	{
+		string name;
+		string OS;
+		long cpuAmount;
+		float memoryTotal;
+		float diskTotal;
+	};
+
+	enum ProcessStatus
+	{
+		SCHEDULED,
+		RUNNING,
+		STOPPED,
+		FAILED,
+		UNKNOWN
+	};
+
+	struct Process
+	{
+		string id;
+		string name;
+		long pid;
+		ProcessStatus status;
+	};
+
+	struct Duration
+	{
+		long seconds;
+	};
+
+	typedef sequence<Process> ProcessList;
+
+	interface MetricsServer
+	{
+		Metrics GetMetrics();
+		boolean GetHeartbeat();
+		ServerInfo GetServerInfo();
+		string GetServerId();
+		ProcessList GetTests();
+		ProcessList GetProcesses();
+		ProcessStatus Run(in Process processInfo);
+		Metrics GetAverageMetrics(in Duration durationInfo);
+	};
+};

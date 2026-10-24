@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>remotetaskmanager</groupId>
+  <artifactId>server-java</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jacorb.version>3.9</jacorb.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.jacorb</groupId>
+      <artifactId>jacorb</artifactId>
+      <version>${jacorb.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-nop</artifactId>
+      <version>1.7.14</version>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.corba</groupId>
+      <artifactId>glassfish-corba-omgapi</artifactId>
+      <version>4.2.4</version>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.corba</groupId>
+      <artifactId>glassfish-corba-orb</artifactId>
+      <version>4.2.4</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jacorb</groupId>
+      <artifactId>jacorb-idl-compiler</artifactId>
+      <version>${jacorb.version}</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>generate-corba-stubs</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>java</executable>
+              <classpathScope>compile</classpathScope>
+              <arguments>
+                <argument>-classpath</argument>
+                <classpath/>
+                <argument>org.jacorb.idl.parser</argument>
+                <argument>-d</argument>
+                <argument>${project.build.directory}/generated-sources/idl</argument>
+                <argument>-notimestamps</argument>
+                <argument>${project.basedir}/Idl/metrics.idl</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>build-sample-test-plugin</id>
+            <phase>process-classes</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <mkdir dir="${project.build.directory}/plugin-classes"/>
+                <javac srcdir="${project.basedir}/src/plugin/java"
+                       destdir="${project.build.directory}/plugin-classes"
+                       classpath="${project.build.outputDirectory}"
+                       includeantruntime="false"
+                       release="17"/>
+                <copy todir="${project.build.directory}/plugin-classes/META-INF/services">
+                  <fileset dir="${project.basedir}/src/plugin/resources/META-INF/services"/>
+                </copy>
+                <mkdir dir="${project.build.directory}/plugins"/>
+                <jar destfile="${project.build.directory}/plugins/sample-tests.jar"
+                     basedir="${project.build.directory}/plugin-classes"/>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.4.0</version>
+        <executions>
+          <execution>
+            <id>add-generated-idl-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${project.build.directory}/generated-sources/idl</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.1</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>rtm.server.Main</mainClass>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

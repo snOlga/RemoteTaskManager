@@ -7,3 +7,9 @@
 /client/obj/
 /client/compiled_idls/
 /client/metricsServer.ior
+/client/rtm-client.db
+/client/rtm-client.db-shm
+/client/rtm-client.db-wal
+/server-java/target/
+/server-java/metricsServer.ior
+/server-java/jacorb.log
