@@ -35,6 +35,11 @@ module RemoteTaskManager
 		ProcessStatus status;
 	};
 
+	exception RemoteError
+	{
+		string message;
+	};
+
 	struct Duration
 	{
 		long seconds;
@@ -49,9 +54,9 @@ module RemoteTaskManager
 		ServerInfo GetServerInfo();
 		string GetServerId();
 		ProcessList GetTests();
-		ProcessList GetProcesses();
-		ProcessStatus Run(in Process processInfo);
-		ProcessStatus Stop(in Process processInfo);
+		ProcessList GetProcesses() raises (RemoteError);
+		ProcessStatus Run(in Process processInfo) raises (RemoteError);
+		ProcessStatus Stop(in Process processInfo) raises (RemoteError);
 		Metrics GetAverageMetrics(in Duration durationInfo);
 	};
 };

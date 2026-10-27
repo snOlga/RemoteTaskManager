@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import RemoteTaskManager.ProcessStatus;
+import RemoteTaskManager.RemoteError;
 
 public final class TestManager {
 
@@ -40,28 +41,36 @@ public final class TestManager {
         return result.toArray(new RemoteTaskManager.Process[0]);
     }
 
-    public RemoteTaskManager.Process[] GetProcesses() {
-        List<RemoteTaskManager.Process> result = ProcessHandle.allProcesses()
-                .filter(ProcessHandle::isAlive)
-                .sorted(Comparator.comparing(TestManager::cpuTime).reversed()
-                        .thenComparingLong(ProcessHandle::pid))
-                .limit(MAX_PROCESSES)
-                .map(TestManager::toCorba)
-                .toList();
-        return result.toArray(new RemoteTaskManager.Process[0]);
+    public RemoteTaskManager.Process[] GetProcesses() throws RemoteError {
+        try {
+            List<RemoteTaskManager.Process> result = ProcessHandle.allProcesses()
+                    .filter(ProcessHandle::isAlive)
+                    .sorted(Comparator.comparing(TestManager::cpuTime).reversed()
+                            .thenComparingLong(ProcessHandle::pid))
+                    .limit(MAX_PROCESSES)
+                    .map(TestManager::toCorba)
+                    .toList();
+            return result.toArray(new RemoteTaskManager.Process[0]);
+        } catch (RuntimeException e) {
+            throw new RemoteError("Unable to enumerate OS processes: " + errorMessage(e));
+        }
     }
 
     private static Duration cpuTime(ProcessHandle handle) {
         return handle.info().totalCpuDuration().orElse(Duration.ZERO);
     }
 
-    public ProcessStatus Run(RemoteTaskManager.Process processInfo) {
+    public ProcessStatus Run(RemoteTaskManager.Process processInfo) throws RemoteError {
+        if (processInfo == null) {
+            throw new RemoteError("Process information is required");
+        }
+
         RemoteTest test = findTest(processInfo.name);
         if (test == null) {
             test = findTest(processInfo.id);
         }
         if (test == null) {
-            return ProcessStatus.FAILED;
+            throw new RemoteError("Test '" + processInfo.name + "' is not available on this server");
         }
 
         try {
@@ -75,26 +84,34 @@ public final class TestManager {
             builder.start();
             return ProcessStatus.RUNNING;
         } catch (Exception e) {
-            return ProcessStatus.FAILED;
+            throw new RemoteError("Failed to start test '" + test.name() + "': " + errorMessage(e));
         }
     }
 
-    public ProcessStatus Stop(RemoteTaskManager.Process processInfo) {
-        ProcessHandle handle = findOsProcess(processInfo);
+    public ProcessStatus Stop(RemoteTaskManager.Process processInfo) throws RemoteError {
+        ProcessHandle handle;
+        try {
+            handle = findOsProcess(processInfo);
+        } catch (RuntimeException e) {
+            throw new RemoteError("Unable to look up the requested process: " + errorMessage(e));
+        }
         if (handle == null) {
-            return ProcessStatus.UNKNOWN;
+            throw new RemoteError("No live OS process found for PID " + processId(processInfo));
         }
         return stopOsProcess(handle);
     }
 
-    private static ProcessStatus stopOsProcess(ProcessHandle handle) {
+    private static ProcessStatus stopOsProcess(ProcessHandle handle) throws RemoteError {
         if (!handle.isAlive()) {
             return ProcessStatus.STOPPED;
         }
 
         try {
             if (!handle.destroy()) {
-                return handle.isAlive() ? ProcessStatus.RUNNING : ProcessStatus.STOPPED;
+                if (handle.isAlive()) {
+                    throw new RemoteError("OS refused the termination request for PID " + handle.pid());
+                }
+                return ProcessStatus.STOPPED;
             }
             handle.onExit().get(STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             return ProcessStatus.STOPPED;
@@ -102,10 +119,32 @@ public final class TestManager {
             return handle.isAlive() ? ProcessStatus.RUNNING : ProcessStatus.STOPPED;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return ProcessStatus.UNKNOWN;
+            throw new RemoteError("Interrupted while waiting for PID " + handle.pid() + " to stop");
+        } catch (RemoteError e) {
+            throw e;
         } catch (Exception e) {
-            return ProcessStatus.UNKNOWN;
+            throw new RemoteError("Failed to stop PID " + handle.pid() + ": " + errorMessage(e));
         }
+    }
+
+    private static long processId(RemoteTaskManager.Process processInfo) {
+        if (processInfo == null) {
+            return 0;
+        }
+        if (processInfo.pid > 0) {
+            return processInfo.pid;
+        }
+        try {
+            return Long.parseLong(processInfo.id);
+        } catch (RuntimeException ignored) {
+            return 0;
+        }
+    }
+
+    private static String errorMessage(Exception e) {
+        return e.getMessage() == null || e.getMessage().isBlank()
+                ? e.getClass().getSimpleName()
+                : e.getMessage();
     }
 
     private static ProcessHandle findOsProcess(RemoteTaskManager.Process processInfo) {

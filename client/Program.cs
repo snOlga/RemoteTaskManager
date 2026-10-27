@@ -98,6 +98,10 @@ while (true)
     {
         Console.Error.WriteLine("No server with id '" + arg + "'");
     }
+    catch (RemoteError e)
+    {
+        Console.Error.WriteLine("Remote server error: " + e.message);
+    }
     catch (System.Exception e)
     {
         Console.Error.WriteLine("Server '" + arg + "' is not responding: " + e.Message);
@@ -201,6 +205,10 @@ public static class CustomExtensions
                 repository.Sync(serverName, remote);
                 started = remote.FirstOrDefault(item => item.id == process.id);
             }
+            catch (RemoteError)
+            {
+                throw;
+            }
             catch (Exception e)
             {
                 repository.Save(new ClientProcessRecord
@@ -237,6 +245,10 @@ public static class CustomExtensions
                 {
                     source = "local database, server is not connected";
                 }
+            }
+            catch (RemoteError)
+            {
+                throw;
             }
             catch (Exception e)
             {
@@ -294,6 +306,10 @@ public static class CustomExtensions
                 target = remote.FirstOrDefault(item => item.id == processKey)
                     ?? remote.FirstOrDefault(item => item.pid > 0 && item.pid.ToString() == processKey)
                     ?? remote.FirstOrDefault(item => string.Equals(item.name, processKey, StringComparison.OrdinalIgnoreCase));
+            }
+            catch (RemoteError)
+            {
+                throw;
             }
             catch (Exception e)
             {

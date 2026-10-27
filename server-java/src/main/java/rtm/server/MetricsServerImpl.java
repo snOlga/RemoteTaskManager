@@ -94,17 +94,17 @@ public final class MetricsServerImpl extends MetricsServerPOA {
     }
 
     @Override
-    public RemoteTaskManager.Process[] GetProcesses() {
+    public RemoteTaskManager.Process[] GetProcesses() throws RemoteTaskManager.RemoteError {
         return testManager.GetProcesses();
     }
 
     @Override
-    public ProcessStatus Run(RemoteTaskManager.Process processInfo) {
+    public ProcessStatus Run(RemoteTaskManager.Process processInfo) throws RemoteTaskManager.RemoteError {
         return testManager.Run(processInfo);
     }
 
     @Override
-    public ProcessStatus Stop(RemoteTaskManager.Process processInfo) {
+    public ProcessStatus Stop(RemoteTaskManager.Process processInfo) throws RemoteTaskManager.RemoteError {
         return testManager.Stop(processInfo);
     }
 
