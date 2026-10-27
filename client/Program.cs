@@ -80,9 +80,14 @@ while (true)
                 break;
 
             case "stop":
-                Console.WriteLine("Shutting down...");
-                orb.Shutdown(false);
-                return;
+                if (string.IsNullOrWhiteSpace(arg))
+                {
+                    Console.WriteLine("Shutting down...");
+                    orb.Shutdown(false);
+                    return;
+                }
+                servers.PrintStopProcess(arg, processRepository);
+                break;
 
             default:
                 Console.WriteLine("No such command");
@@ -109,7 +114,8 @@ static void PrintUsage()
     Console.WriteLine("info [server_name]           --  get server info (OS, CPU amount, memory, disk)");
     Console.WriteLine("tests [server_name]          --  list tests available on the server");
     Console.WriteLine("run [server_name] [test]     --  start a test (test name or id)");
-    Console.WriteLine("processes [server_name]      --  list persisted process instances");
+    Console.WriteLine("processes [server_name]      --  list top 10 running OS processes");
+    Console.WriteLine("stop [server] [process]      --  gracefully stop a process (id, pid or name)");
     Console.WriteLine("stop                         --  stop orb");
 }
 
@@ -217,13 +223,15 @@ public static class CustomExtensions
 
         public void PrintProcesses(string arg, ClientProcessRepository repository)
         {
+            Process[]? remoteProcesses = null;
             string source;
             try
             {
                 if (servers.TryGetValue(arg, out IMetricsServer? server))
                 {
-                    repository.Sync(arg, server.GetProcesses());
-                    source = "synced with server";
+                    remoteProcesses = server.GetProcesses() ?? Array.Empty<Process>();
+                    repository.Sync(arg, remoteProcesses);
+                    source = "top 10 from server OS";
                 }
                 else
                 {
@@ -233,6 +241,22 @@ public static class CustomExtensions
             catch (Exception e)
             {
                 source = "local database, server error: " + e.Message;
+            }
+
+            if (remoteProcesses != null)
+            {
+                Console.WriteLine("Processes on '" + arg + "' (" + source + "):");
+                if (remoteProcesses.Length == 0)
+                {
+                    Console.WriteLine("  (none)");
+                    return;
+                }
+
+                foreach (Process process in remoteProcesses)
+                {
+                    Console.WriteLine("  " + process.id + "  " + process.name + "  PID=" + process.pid + "  " + process.status);
+                }
+                return;
             }
 
             IReadOnlyList<ClientProcessRecord> processes = repository.GetByServer(arg);
@@ -247,6 +271,68 @@ public static class CustomExtensions
             {
                 Console.WriteLine("  " + process.Id + "  " + process.Name + "  PID=" + process.Pid + "  " + process.Status
                     + "  updated=" + process.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+            }
+        }
+
+        public void PrintStopProcess(string arg, ClientProcessRepository repository)
+        {
+            string[] parts = arg.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+            {
+                Console.WriteLine("Usage: stop [server_name] [process id, pid or name]");
+                return;
+            }
+
+            string serverName = parts[0];
+            string processKey = parts[1];
+            IMetricsServer server = servers[serverName];
+
+            Process? target = null;
+            try
+            {
+                Process[] remote = server.GetProcesses();
+                target = remote.FirstOrDefault(item => item.id == processKey)
+                    ?? remote.FirstOrDefault(item => item.pid > 0 && item.pid.ToString() == processKey)
+                    ?? remote.FirstOrDefault(item => string.Equals(item.name, processKey, StringComparison.OrdinalIgnoreCase));
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("Failed to get processes from server, trying local database: " + e.Message);
+            }
+
+            if (target == null)
+            {
+                IReadOnlyList<ClientProcessRecord> local = repository.GetByServer(serverName);
+                ClientProcessRecord? record = local.FirstOrDefault(item => item.Id == processKey)
+                    ?? local.FirstOrDefault(item => item.Pid > 0 && item.Pid.ToString() == processKey)
+                    ?? local.FirstOrDefault(item => string.Equals(item.Name, processKey, StringComparison.OrdinalIgnoreCase));
+
+                if (record != null)
+                {
+                    target = new Process
+                    {
+                        id = record.Id,
+                        name = record.Name,
+                        pid = record.Pid,
+                        status = record.Status
+                    };
+                }
+            }
+
+            if (target == null)
+            {
+                Console.WriteLine("Process '" + processKey + "' not found on '" + serverName + "'");
+                return;
+            }
+
+            ProcessStatus status = server.Stop(target);
+            Console.WriteLine("Process '" + target.id + "' on '" + serverName + "': " + status);
+
+            ClientProcessRecord? stored = repository.Get(target.id);
+            if (stored != null)
+            {
+                stored.Status = status;
+                repository.Save(stored);
             }
         }
 

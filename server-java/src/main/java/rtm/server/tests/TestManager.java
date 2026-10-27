@@ -1,29 +1,23 @@
 package rtm.server.tests;
 
-import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import RemoteTaskManager.ProcessStatus;
 
 public final class TestManager {
 
+    private static final int MAX_PROCESSES = 10;
+    private static final long STOP_TIMEOUT_SECONDS = 5;
+
     private final List<RemoteTest> tests;
     private final Map<String, RemoteTest> testsByName = new ConcurrentHashMap<>();
     private final Map<String, RemoteTest> testsById = new ConcurrentHashMap<>();
-    private final Map<String, ProcessRecord> processes = new ConcurrentHashMap<>();
-    private final ExecutorService monitorExecutor = Executors.newCachedThreadPool(runnable
-            -> {
-        Thread thread = new Thread(runnable, "test-process-monitor");
-        thread.setDaemon(true);
-        return thread;
-    });
 
     public TestManager() {
         tests = TestCatalog.loadFromPlugins();
@@ -41,44 +35,34 @@ public final class TestManager {
     public RemoteTaskManager.Process[] GetTests() {
         List<RemoteTaskManager.Process> result = new ArrayList<>();
         for (RemoteTest test : tests) {
-            ProcessRecord latest = latestByTest(test.name());
-            result.add(toCorba(test.id(), test.name(), latest));
+            result.add(toCorba(test.id(), test.name()));
         }
         return result.toArray(new RemoteTaskManager.Process[0]);
     }
 
     public RemoteTaskManager.Process[] GetProcesses() {
-        List<ProcessRecord> records = new ArrayList<>(processes.values());
-        records.sort(Comparator.comparing((ProcessRecord record) -> record.startedAt).reversed());
-        List<RemoteTaskManager.Process> result = new ArrayList<>();
-        for (ProcessRecord record : records) {
-            result.add(toCorba(record.id, record.name, record));
-        }
+        List<RemoteTaskManager.Process> result = ProcessHandle.allProcesses()
+                .filter(ProcessHandle::isAlive)
+                .sorted(Comparator.comparing(TestManager::cpuTime).reversed()
+                        .thenComparingLong(ProcessHandle::pid))
+                .limit(MAX_PROCESSES)
+                .map(TestManager::toCorba)
+                .toList();
         return result.toArray(new RemoteTaskManager.Process[0]);
     }
 
-    public synchronized ProcessStatus Run(RemoteTaskManager.Process processInfo) {
-        String id = processInfo.id == null || processInfo.id.isBlank()
-                ? UUID.randomUUID().toString()
-                : processInfo.id;
+    private static Duration cpuTime(ProcessHandle handle) {
+        return handle.info().totalCpuDuration().orElse(Duration.ZERO);
+    }
 
-        ProcessRecord existing = processes.get(id);
-        if (existing != null
-                && (existing.status.equals(ProcessStatus.RUNNING) || existing.status.equals(ProcessStatus.SCHEDULED))) {
-            return existing.status;
-        }
-
+    public ProcessStatus Run(RemoteTaskManager.Process processInfo) {
         RemoteTest test = findTest(processInfo.name);
         if (test == null) {
             test = findTest(processInfo.id);
         }
         if (test == null) {
-            saveFailure(id, processInfo.name, "Test '" + processInfo.name + "' is not available on this server");
             return ProcessStatus.FAILED;
         }
-
-        ProcessRecord record = new ProcessRecord(id, test.name());
-        processes.put(id, record);
 
         try {
             ProcessLaunch launch = test.createLaunch();
@@ -88,15 +72,56 @@ public final class TestManager {
             }
             builder.environment().putAll(launch.environment());
 
-            Process started = builder.start();
-            record.pid = Math.toIntExact(started.pid());
-            record.status = ProcessStatus.RUNNING;
-            monitorExecutor.submit(() -> monitor(started, id, record.pid));
+            builder.start();
             return ProcessStatus.RUNNING;
         } catch (Exception e) {
-            saveFailure(id, test.name(), e.getMessage());
             return ProcessStatus.FAILED;
         }
+    }
+
+    public ProcessStatus Stop(RemoteTaskManager.Process processInfo) {
+        ProcessHandle handle = findOsProcess(processInfo);
+        if (handle == null) {
+            return ProcessStatus.UNKNOWN;
+        }
+        return stopOsProcess(handle);
+    }
+
+    private static ProcessStatus stopOsProcess(ProcessHandle handle) {
+        if (!handle.isAlive()) {
+            return ProcessStatus.STOPPED;
+        }
+
+        try {
+            if (!handle.destroy()) {
+                return handle.isAlive() ? ProcessStatus.RUNNING : ProcessStatus.STOPPED;
+            }
+            handle.onExit().get(STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return ProcessStatus.STOPPED;
+        } catch (java.util.concurrent.TimeoutException e) {
+            return handle.isAlive() ? ProcessStatus.RUNNING : ProcessStatus.STOPPED;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ProcessStatus.UNKNOWN;
+        } catch (Exception e) {
+            return ProcessStatus.UNKNOWN;
+        }
+    }
+
+    private static ProcessHandle findOsProcess(RemoteTaskManager.Process processInfo) {
+        if (processInfo == null) {
+            return null;
+        }
+
+        long pid = processInfo.pid;
+        if (pid <= 0 && processInfo.id != null && !processInfo.id.isBlank()) {
+            try {
+                pid = Long.parseLong(processInfo.id.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return pid <= 0 ? null : ProcessHandle.of(pid).filter(ProcessHandle::isAlive).orElse(null);
     }
 
     private RemoteTest findTest(String nameOrId) {
@@ -109,63 +134,28 @@ public final class TestManager {
         return test != null ? test : testsById.get(key);
     }
 
-    private ProcessRecord latestByTest(String name) {
-        return processes.values().stream()
-                .filter(record -> record.name.equals(name))
-                .max(Comparator.comparing(record -> record.startedAt))
-                .orElse(null);
-    }
-
-    private void saveFailure(String id, String name, String error) {
-        ProcessRecord record = new ProcessRecord(id, name == null ? "" : name);
-        record.status = ProcessStatus.FAILED;
-        record.finishedAt = Instant.now();
-        record.error = error;
-        processes.put(id, record);
-    }
-
-    private void monitor(Process process, String id, int pid) {
-        try {
-            int exitCode = process.waitFor();
-            synchronized (this) {
-                ProcessRecord record = processes.get(id);
-                if (record == null || record.pid != pid) {
-                    return;
-                }
-
-                record.status = exitCode == 0 ? ProcessStatus.STOPPED : ProcessStatus.FAILED;
-                record.finishedAt = Instant.now();
-                if (exitCode != 0) {
-                    record.error = "Test exited with code " + exitCode;
-                }
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    private static RemoteTaskManager.Process toCorba(String id, String name, ProcessRecord record) {
+    private static RemoteTaskManager.Process toCorba(String id, String name) {
         RemoteTaskManager.Process process = new RemoteTaskManager.Process();
         process.id = id;
         process.name = name;
-        process.pid = record == null ? 0 : record.pid;
-        process.status = record == null ? ProcessStatus.UNKNOWN : record.status;
+        process.pid = 0;
+        process.status = ProcessStatus.UNKNOWN;
         return process;
     }
 
-    private static final class ProcessRecord {
+    private static RemoteTaskManager.Process toCorba(ProcessHandle handle) {
+        long pid = handle.pid();
+        String name = handle.info().command()
+                .map(command -> new java.io.File(command).getName())
+                .filter(value -> !value.isBlank())
+                .orElse("pid-" + pid);
 
-        private final String id;
-        private final String name;
-        private final Instant startedAt = Instant.now();
-        private int pid;
-        private ProcessStatus status = ProcessStatus.SCHEDULED;
-        private Instant finishedAt;
-        private String error;
-
-        private ProcessRecord(String id, String name) {
-            this.id = id;
-            this.name = name;
-        }
+        RemoteTaskManager.Process process = new RemoteTaskManager.Process();
+        process.id = Long.toString(pid);
+        process.name = name;
+        process.pid = (int) pid;
+        process.status = ProcessStatus.RUNNING;
+        return process;
     }
+
 }

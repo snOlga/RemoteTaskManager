@@ -104,6 +104,11 @@ public final class MetricsServerImpl extends MetricsServerPOA {
     }
 
     @Override
+    public ProcessStatus Stop(RemoteTaskManager.Process processInfo) {
+        return testManager.Stop(processInfo);
+    }
+
+    @Override
     public Metrics GetAverageMetrics(Duration durationInfo) {
         int seconds = durationInfo == null ? 0 : durationInfo.seconds;
         return metricsHistory.GetAverage(seconds);

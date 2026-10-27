@@ -51,6 +51,7 @@ module RemoteTaskManager
 		ProcessList GetTests();
 		ProcessList GetProcesses();
 		ProcessStatus Run(in Process processInfo);
+		ProcessStatus Stop(in Process processInfo);
 		Metrics GetAverageMetrics(in Duration durationInfo);
 	};
 };
