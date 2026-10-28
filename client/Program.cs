@@ -70,6 +70,26 @@ while (true)
                 servers.PrintRunTest(arg, processRepository);
                 break;
 
+            case "get":
+                servers.PrintGetProccess(arg, processRepository);
+                break;
+
+            case "schedule":
+                servers.PrintSchedule(arg, processRepository);
+                break;
+
+            case "pmetrics":
+                servers.PrintMetricsByProcess(arg);
+                break;
+
+            case "paverage":
+                servers.PrintAverageMetricsByProcess(arg);
+                break;
+
+            case "stacktrace":
+                servers.PrintStackTrace(arg);
+                break;
+
             case "processes":
                 servers.PrintProcesses(arg, processRepository);
                 break;
@@ -118,7 +138,12 @@ static void PrintUsage()
     Console.WriteLine("info [server_name]           --  get server info (OS, CPU amount, memory, disk)");
     Console.WriteLine("tests [server_name]          --  list tests available on the server");
     Console.WriteLine("run [server_name] [test]     --  start a test (test name or id)");
+    Console.WriteLine("get [server_name] [pid]      --  get proccess info by pid");
     Console.WriteLine("processes [server_name]      --  list top 10 running OS processes");
+    Console.WriteLine("pmetrics [server] [pid]      --  get process CPU/memory metrics");
+    Console.WriteLine("paverage [server] [pid] [s]  --  average process metrics for the last seconds");
+    Console.WriteLine("schedule [server] [datetime] [test] -- schedule a test at an ISO-8601 time");
+    Console.WriteLine("stacktrace [server] [pid]    --  get a JVM process thread dump");
     Console.WriteLine("stop [server] [process]      --  gracefully stop a process (id, pid or name)");
     Console.WriteLine("stop                         --  stop orb");
 }
@@ -227,6 +252,143 @@ public static class CustomExtensions
             {
                 Console.WriteLine("PID: " + started.pid);
             }
+        }
+
+        public void PrintGetProccess(string arg, ClientProcessRepository repository)
+        {
+            string[] parts = arg.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+            {
+                Console.WriteLine("Usage: get [server_name] [pid]");
+                return;
+            }
+
+            string serverName = parts[0];
+            var process = new Process
+            {
+                id = Guid.NewGuid().ToString("N"),
+                name = "",
+                pid = int.Parse(parts[1]),
+                status = ProcessStatus.SCHEDULED
+            };
+
+            process = servers[serverName].Get(process);
+            Console.WriteLine("Proccess '" + process.name + "' on '" + serverName + "': " + process.status);
+            Console.WriteLine("Process id: " + process.id);
+            Console.WriteLine("PID: " + process.pid);
+            repository.Sync(serverName, [process]);
+        }
+
+        public void PrintSchedule(string arg, ClientProcessRepository repository)
+        {
+            string[] parts = arg.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 3)
+            {
+                Console.WriteLine("Usage: schedule [server_name] [ISO-8601 datetime] [test name or id]");
+                return;
+            }
+            if (!DateTimeOffset.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out DateTimeOffset scheduledAt))
+            {
+                Console.WriteLine("Datetime must be ISO-8601, for example 2026-10-28T15:30:00Z");
+                return;
+            }
+
+            string serverName = parts[0];
+            Process process = new Process
+            {
+                id = Guid.NewGuid().ToString("N"),
+                name = parts[2],
+                pid = 0,
+                status = ProcessStatus.SCHEDULED
+            };
+            ProcessStatus status = servers[serverName].Schedule(process, new ScheduleTime
+            {
+                epochMillis = scheduledAt.ToUnixTimeMilliseconds()
+            });
+            Console.WriteLine("Scheduled test '" + process.name + "' on '" + serverName + "' for "
+                + scheduledAt.ToString("O") + ": " + status);
+            repository.Save(new ClientProcessRecord
+            {
+                Id = process.id,
+                ServerId = serverName,
+                Name = process.name,
+                Status = status,
+                StartedAt = DateTime.UtcNow
+            });
+        }
+
+        public void PrintMetricsByProcess(string arg)
+        {
+            string[] parts = arg.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2 || !int.TryParse(parts[1], out int pid))
+            {
+                Console.WriteLine("Usage: pmetrics [server_name] [pid]");
+                return;
+            }
+
+            Process process = new Process
+            {
+                id = pid.ToString(),
+                name = "",
+                pid = pid,
+                status = ProcessStatus.RUNNING
+            };
+            Metrics metrics = servers[parts[0]].GetMetricsByProcess(process);
+            Console.WriteLine("Process metrics for PID " + pid + " on '" + parts[0] + "':");
+            Console.WriteLine("CPU usage:   " + metrics.cpuUsage.ToString("N1") + " %");
+            Console.WriteLine("Memory used: " + metrics.memoryUsage.ToString("N2") + " / " + metrics.memoryTotal.ToString("N2") + " MiB");
+        }
+
+        public void PrintAverageMetricsByProcess(string arg)
+        {
+            string[] parts = arg.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2 || !int.TryParse(parts[1], out int pid))
+            {
+                Console.WriteLine("Usage: paverage [server_name] [pid] [seconds]");
+                return;
+            }
+
+            int seconds = 60;
+            if (parts.Length > 2 && !int.TryParse(parts[2], out seconds))
+            {
+                Console.WriteLine("Seconds must be an integer");
+                return;
+            }
+
+            Process process = new Process
+            {
+                id = pid.ToString(),
+                name = "",
+                pid = pid,
+                status = ProcessStatus.RUNNING
+            };
+            Metrics metrics = servers[parts[0]].GetAvarageMetricsByProcess(process, new Duration { seconds = seconds });
+            Console.WriteLine("Average process metrics for PID " + pid + " over " + seconds + " seconds:");
+            Console.WriteLine("CPU usage:   " + metrics.cpuUsage.ToString("N1") + " %");
+            Console.WriteLine("Memory used: " + metrics.memoryUsage.ToString("N2") + " / " + metrics.memoryTotal.ToString("N2") + " MiB");
+        }
+
+        public void PrintStackTrace(string arg)
+        {
+            string[] parts = arg.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2 || !int.TryParse(parts[1], out int pid))
+            {
+                Console.WriteLine("Usage: stacktrace [server_name] [pid]");
+                return;
+            }
+
+            Process process = new Process
+            {
+                id = pid.ToString(),
+                name = "",
+                pid = pid,
+                status = ProcessStatus.RUNNING
+            };
+            StackTrace stackTrace = servers[parts[0]].GetStackTrace(process);
+            Console.WriteLine("Stack trace for PID " + stackTrace.pid + " on '" + parts[0] + "':");
+            Console.WriteLine(stackTrace.trace);
         }
 
         public void PrintProcesses(string arg, ClientProcessRepository repository)

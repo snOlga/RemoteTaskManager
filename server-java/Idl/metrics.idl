@@ -35,6 +35,12 @@ module RemoteTaskManager
 		ProcessStatus status;
 	};
 
+	struct StackTrace
+	{
+		long pid;
+		string trace;
+	};
+
 	exception RemoteError
 	{
 		string message;
@@ -43,6 +49,11 @@ module RemoteTaskManager
 	struct Duration
 	{
 		long seconds;
+	};
+
+	struct ScheduleTime
+	{
+		long long epochMillis;
 	};
 
 	typedef sequence<Process> ProcessList;
@@ -55,8 +66,13 @@ module RemoteTaskManager
 		string GetServerId();
 		ProcessList GetTests();
 		ProcessList GetProcesses() raises (RemoteError);
+		Process Get(in Process processInfo) raises (RemoteError);
 		ProcessStatus Run(in Process processInfo) raises (RemoteError);
 		ProcessStatus Stop(in Process processInfo) raises (RemoteError);
+		Metrics GetMetricsByProcess(in Process processInfo) raises (RemoteError);
+		Metrics GetAvarageMetricsByProcess(in Process processInfo, in Duration durationInfo) raises (RemoteError);
+		ProcessStatus Schedule(in Process processInfo, in ScheduleTime scheduledAt) raises (RemoteError);
+		StackTrace GetStackTrace(in Process processInfo) raises (RemoteError);
 		Metrics GetAverageMetrics(in Duration durationInfo);
 	};
 };

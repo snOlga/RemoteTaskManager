@@ -4,18 +4,24 @@ import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import RemoteTaskManager.Duration;
 import RemoteTaskManager.Metrics;
 import RemoteTaskManager.MetricsServerPOA;
+import RemoteTaskManager.Process;
 import RemoteTaskManager.ProcessStatus;
+import RemoteTaskManager.RemoteError;
 import RemoteTaskManager.ServerInfo;
+import RemoteTaskManager.StackTrace;
 import rtm.server.tests.TestManager;
 
 public final class MetricsServerImpl extends MetricsServerPOA {
@@ -28,6 +34,7 @@ public final class MetricsServerImpl extends MetricsServerPOA {
     private final String serverId;
     private final TestManager testManager;
     private final MetricsHistory metricsHistory;
+    private final ProcessMetricsCollector processMetricsCollector = new ProcessMetricsCollector();
 
     public MetricsServerImpl() {
         this(defaultServerId());
@@ -99,13 +106,79 @@ public final class MetricsServerImpl extends MetricsServerPOA {
     }
 
     @Override
-    public ProcessStatus Run(RemoteTaskManager.Process processInfo) throws RemoteTaskManager.RemoteError {
+    public Process Get(Process processInfo) throws RemoteError {
+        return testManager.getProcess(processInfo);
+    }
+
+    @Override
+    public ProcessStatus Run(RemoteTaskManager.Process processInfo) throws RemoteError {
         return testManager.Run(processInfo);
     }
 
     @Override
-    public ProcessStatus Stop(RemoteTaskManager.Process processInfo) throws RemoteTaskManager.RemoteError {
+    public ProcessStatus Stop(RemoteTaskManager.Process processInfo) throws RemoteError {
         return testManager.Stop(processInfo);
+    }
+
+    @Override
+    public Metrics GetMetricsByProcess(Process processInfo) throws RemoteError {
+        Process process = testManager.getProcess(processInfo);
+        return processMetricsCollector.Get(process.pid);
+    }
+
+    @Override
+    public Metrics GetAvarageMetricsByProcess(Process processInfo, Duration durationInfo) throws RemoteError {
+        Process process = testManager.getProcess(processInfo);
+        int seconds = durationInfo == null ? 60 : durationInfo.seconds;
+        return processMetricsCollector.GetAverage(process.pid, seconds);
+    }
+
+    @Override
+    public ProcessStatus Schedule(Process processInfo, RemoteTaskManager.ScheduleTime scheduledAt) throws RemoteError {
+        return testManager.Schedule(processInfo, scheduledAt);
+    }
+
+    @Override
+    public StackTrace GetStackTrace(Process processInfo) throws RemoteError {
+        Process process = testManager.getProcess(processInfo);
+        return new StackTrace(process.pid, collectStackTrace(process.pid));
+    }
+
+    private static String collectStackTrace(int pid) throws RemoteError {
+        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        String executable = windows ? "jcmd.exe" : "jcmd";
+        Path jcmd = Path.of(System.getProperty("java.home"), "bin", executable);
+        String command = Files.isExecutable(jcmd) ? jcmd.toString() : "jcmd";
+        List<String> arguments = List.of(command, Integer.toString(pid), "Thread.print", "-l");
+
+        try {
+            java.lang.Process process = new ProcessBuilder(arguments).redirectErrorStream(true).start();
+            CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return process.getInputStream().readAllBytes();
+                } catch (IOException e) {
+                    throw new java.util.concurrent.CompletionException(e);
+                }
+            });
+            if (!process.waitFor(15, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new RemoteError("Timed out collecting stack trace for PID " + pid);
+            }
+
+            String trace = new String(output.get(2, TimeUnit.SECONDS), StandardCharsets.UTF_8).trim();
+            if (process.exitValue() != 0 || trace.isBlank()) {
+                throw new RemoteError("Unable to collect stack trace for PID " + pid + ": " + trace);
+            }
+            return trace;
+        } catch (RemoteError e) {
+            throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RemoteError("Interrupted while collecting stack trace for PID " + pid);
+        } catch (Exception e) {
+            String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            throw new RemoteError("Unable to collect stack trace for PID " + pid + ": " + message);
+        }
     }
 
     @Override

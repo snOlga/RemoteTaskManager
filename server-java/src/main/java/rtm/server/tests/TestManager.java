@@ -6,6 +6,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import RemoteTaskManager.ProcessStatus;
@@ -19,6 +21,11 @@ public final class TestManager {
     private final List<RemoteTest> tests;
     private final Map<String, RemoteTest> testsByName = new ConcurrentHashMap<>();
     private final Map<String, RemoteTest> testsById = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduledLaunches = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "scheduled-test-launcher");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     public TestManager() {
         tests = TestCatalog.loadFromPlugins();
@@ -60,6 +67,18 @@ public final class TestManager {
         return handle.info().totalCpuDuration().orElse(Duration.ZERO);
     }
 
+    public RemoteTaskManager.Process getProcess(RemoteTaskManager.Process processInfo) throws RemoteError {
+        if (processInfo == null) {
+            throw new RemoteError("Process information is required");
+        }
+
+        ProcessHandle handle = findOsProcess(processInfo);
+        if (handle == null || !handle.isAlive()) {
+            throw new RemoteError("No live OS process found for PID " + processId(processInfo));
+        }
+        return toCorba(handle);
+    }
+
     public ProcessStatus Run(RemoteTaskManager.Process processInfo) throws RemoteError {
         if (processInfo == null) {
             throw new RemoteError("Process information is required");
@@ -74,18 +93,51 @@ public final class TestManager {
         }
 
         try {
-            ProcessLaunch launch = test.createLaunch();
-            ProcessBuilder builder = new ProcessBuilder(launch.command());
-            if (launch.workingDirectory() != null && !launch.workingDirectory().isBlank()) {
-                builder.directory(new java.io.File(launch.workingDirectory()));
-            }
-            builder.environment().putAll(launch.environment());
-
-            builder.start();
+            launch(test);
             return ProcessStatus.RUNNING;
         } catch (Exception e) {
             throw new RemoteError("Failed to start test '" + test.name() + "': " + errorMessage(e));
         }
+    }
+
+    public ProcessStatus Schedule(RemoteTaskManager.Process processInfo, RemoteTaskManager.ScheduleTime scheduledAt)
+            throws RemoteError {
+        if (processInfo == null) {
+            throw new RemoteError("Process information is required");
+        }
+        if (scheduledAt == null) {
+            throw new RemoteError("A schedule date and time is required");
+        }
+
+        RemoteTest test = findTest(processInfo.name);
+        if (test == null) {
+            test = findTest(processInfo.id);
+        }
+        if (test == null) {
+            throw new RemoteError("Test '" + processInfo.name + "' is not available on this server");
+        }
+
+        RemoteTest scheduledTest = test;
+        long now = System.currentTimeMillis();
+        long delayMillis = scheduledAt.epochMillis <= now ? 0 : scheduledAt.epochMillis - now;
+        scheduledLaunches.schedule(() -> {
+            try {
+                launch(scheduledTest);
+            } catch (Exception e) {
+                System.err.println("Scheduled test '" + scheduledTest.name() + "' failed to start: " + errorMessage(e));
+            }
+        }, delayMillis, TimeUnit.MILLISECONDS);
+        return ProcessStatus.SCHEDULED;
+    }
+
+    private static void launch(RemoteTest test) throws Exception {
+        ProcessLaunch launch = test.createLaunch();
+        ProcessBuilder builder = new ProcessBuilder(launch.command());
+        if (launch.workingDirectory() != null && !launch.workingDirectory().isBlank()) {
+            builder.directory(new java.io.File(launch.workingDirectory()));
+        }
+        builder.environment().putAll(launch.environment());
+        builder.start();
     }
 
     public ProcessStatus Stop(RemoteTaskManager.Process processInfo) throws RemoteError {
@@ -160,7 +212,7 @@ public final class TestManager {
                 return null;
             }
         }
-        return pid <= 0 ? null : ProcessHandle.of(pid).filter(ProcessHandle::isAlive).orElse(null);
+        return pid <= 0 ? null : ProcessHandle.of(pid).orElse(null);
     }
 
     private RemoteTest findTest(String nameOrId) {
